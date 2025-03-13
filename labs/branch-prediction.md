@@ -6,16 +6,28 @@ In this lab, you will need to modify the existing [branch predictor](https://git
 ## Pre-Lab Questions
 
 1. What is the purpose of a branch predictor? Why does a single-cycle core not need branch prediction?
-2. Define and compare and contrast the following:
+   The branch predictor tries to guess which way a branch will go. A single-cycle core doesn't need branch prediction because the branch decision is known within a single cycle and there
+   is no pipeline to fill upcoming instructions.
+3. Define and compare and contrast the following:
     * Static branch prediction vs. Dynamic branch prediction
+      Static branch prediction: The branch would always be assumed to be taken until it is evaluated.
+      Dynamic branch prediction: The branch decision is determined according to the dynamic history of core execution.
     * One-level branch prediction vs. Two-level predictor
+      One-level branch prediction: Uses one bit only in the branch buffer to indicate if the last branch prediction was taken or not.
+      Two-level branch prediction: Uses two bits to indicate if the branch has been taken before atleast two times or not. It takes two 
     * Local branch prediction vs. Global branch prediction
-3. Define BHT, BTB and RAS. What are they used for?
-4. Look at [frontend.sv](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv). What are the 4 types of instructions that the branch predictor handles, and how are they handled?
-5. How is a branch resolution handled?
-6. What kind of dynamic branch predictor does CVA6 use?
-7. Provide a GitHub permalink to where in `ariane_pkg` the branch predictor structs are defined.
-8. When can more than 1 instruction be fetched per cycle?
+      Local branch predicts based on the current branch.
+      Global branch predicts based on previous related branches.
+4. Define BHT, BTB and RAS. What are they used for?
+   BHT: Branch History Table, memory array indexed by low order bits in the address and it indicates if the branch was previously taken or not.
+   BTB: Branch Target Buffer, Stores the target for the branches and provides prediction results.
+   RAS: Return Address Stack, stores the PC of instructions following JAL to be returned to after a "ret" is issued.
+6. Look at [frontend.sv](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv). What are the 4 types of instructions that the branch predictor handles, and how are they handled?
+   
+8. How is a branch resolution handled?
+9. What kind of dynamic branch predictor does CVA6 use?
+10. Provide a GitHub permalink to where in `ariane_pkg` the branch predictor structs are defined.
+11. When can more than 1 instruction be fetched per cycle?
 
 ## Part 1 - CVA6 Predictor
 
