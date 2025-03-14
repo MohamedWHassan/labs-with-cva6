@@ -23,11 +23,25 @@ In this lab, you will need to modify the existing [branch predictor](https://git
    BTB: Branch Target Buffer, Stores the target for the branches and provides prediction results.
    RAS: Return Address Stack, stores the PC of instructions following JAL to be returned to after a "ret" is issued.
 6. Look at [frontend.sv](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv). What are the 4 types of instructions that the branch predictor handles, and how are they handled?
+   The four types of instructions are branch, return, jump, and jump and link
+   Branch: If it is a branch instruction, and dynamic target branch prediction from the BHT is valid, then we use the BHT     predicted address as the next PC. Else, the prediction is statically defined and it is taken if we have a negative         relative jump offset while if it positive the branch is not taken.
+
+   Return: The predicted addres comes from the RAS unit as this is a return from a jump instruction.
+   
+   Jump: This jumps to a register and no prediction is needed as the address is already in the instruction??? maybe?
+   
+   Jal: BTB will generate the predicted address if it returns a valid address. Otherwise, it is not considered as a control flow instruction and it will generate a mispredict.
    
 8. How is a branch resolution handled?
-9. What kind of dynamic branch predictor does CVA6 use?
-10. Provide a GitHub permalink to where in `ariane_pkg` the branch predictor structs are defined.
-11. When can more than 1 instruction be fetched per cycle?
+   If it is a branch instruction, and dynamic target branch prediction from the BHT is valid, then we use the BHT     predicted address as the next PC. Else, the prediction is statically defined and it is taken if we have a negative         relative jump offset while if it positive the branch is not taken.
+
+10. What kind of dynamic branch predictor does CVA6 use?
+    A two bit branch predictor.
+12. Provide a GitHub permalink to where in `ariane_pkg` the branch predictor structs are defined.
+    https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/include/ariane_pkg.sv#L326
+    
+14. When can more than 1 instruction be fetched per cycle?
+When compressed extention is enabled.
 
 ## Part 1 - CVA6 Predictor
 
