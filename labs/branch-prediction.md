@@ -5,26 +5,27 @@ In this lab, you will need to modify the existing [branch predictor](https://git
 
 ## Pre-Lab Questions
 
-1. What is the purpose of a branch predictor? Why does a single-cycle core not need branch prediction?
+1. What is the purpose of a branch predictor? Why does a single-cycle core not need branch prediction? \
    The branch predictor tries to guess which way a branch will go. A single-cycle core doesn't need branch prediction because the branch decision is known within a single cycle and there
    is no pipeline to fill upcoming instructions.
-3. Define and compare and contrast the following:
+3. Define and compare and contrast the following: \
     * Static branch prediction vs. Dynamic branch prediction
-      Static branch prediction: The branch would always be assumed to be taken until it is evaluated.
+      Static branch prediction: The branch would always be assumed to be taken until it is evaluated. \
       Dynamic branch prediction: The branch decision is determined according to the dynamic history of core execution.
-    * One-level branch prediction vs. Two-level predictor
-      One-level branch prediction: Uses one bit only in the branch buffer to indicate if the last branch prediction was taken or not.
+    * One-level branch prediction vs. Two-level predictor \
+      One-level branch prediction: Uses one bit only in the branch buffer to indicate if the last branch prediction was taken or not. \
       Two-level branch prediction: Uses two bits to indicate if the branch has been taken before atleast two times or not. It takes two 
-    * Local branch prediction vs. Global branch prediction
-      Local branch predicts based on the current branch.
+    * Local branch prediction vs. Global branch prediction \
+      Local branch predicts based on the current branch. \
       Global branch predicts based on previous related branches.
-4. Define BHT, BTB and RAS. What are they used for?
-   BHT: Branch History Table, memory array indexed by low order bits in the address and it indicates if the branch was previously taken or not.
-   BTB: Branch Target Buffer, Stores the target for the branches and provides prediction results.
+4. Define BHT, BTB and RAS. What are they used for? \
+   BHT: Branch History Table, memory array indexed by low order bits in the address and it indicates if the branch was previously taken or not. \
+   BTB: Branch Target Buffer, Stores the target for the branches and provides prediction results. \
    RAS: Return Address Stack, stores the PC of instructions following JAL to be returned to after a "ret" is issued.
-6. Look at [frontend.sv](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv). What are the 4 types of instructions that the branch predictor handles, and how are they handled?
-   The four types of instructions are branch, return, jump, and jump and link
-   Branch: If it is a branch instruction, and dynamic target branch prediction from the BHT is valid, then we use the BHT     predicted address as the next PC. Else, the prediction is statically defined and it is taken if we have a negative         relative jump offset while if it positive the branch is not taken.
+6. Look at [frontend.sv](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv). What are the 4 types of instructions that the branch predictor handles, and how are they handled? \
+   The four types of instructions are branch, return, jump, and jump and link. \
+   Branch: If it is a branch instruction, and dynamic target branch prediction from the BHT is valid, then we use the BHT predicted address as the next PC. \
+   Else, the prediction is statically defined and it is taken if we have a negative   relative jump offset while if it positive the branch is not taken.
 
    Return: The predicted addres comes from the RAS unit as this is a return from a jump instruction.
    
@@ -52,9 +53,37 @@ To do this, you can create an `always_ff @(posedge clk)` block that counts how m
 ### Part 1 Questions
 
 1. Highlight your changes to `"frontend.sv"` that records the hit-rate.
-2. What are the final hit-rate percentages of each of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp)?
-3. Compare the performance of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp) after choosing 3 new values for [`NR_ENTRIES`](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv#L419). Display the 4 hit-rates in a table and explain how and why each program changes its hit-rate as BHT size changes. *Note: When changing `NR_ENTRIES`, be sure to change `NR_ENTRIES` in the `bht` instantiation in `"frontend.sv"`, not the `bht` declaration in `"bht.sv"`. Also your `NR_ENTRIES` values should be on the order of 16 to have interesting results.*
-
+```systemverilog
+//TODO: Part 1 Question CVA6 branch Predictor performance
+    //TODO: Count how many resolutions were mispredicts HITRATE = 1-(num_mispredicts/num_valid_resolutions)
+    real valid_counter = 0;
+    real mispredict_counter = 0;
+    real div = 0;
+    integer f;
+    initial begin
+        f = $fopen("bp.txt","w");
+    end
+    always_ff @(posedge clk_i) begin
+      if(resolved_branch_i.valid) begin
+        valid_counter <= valid_counter + 1;
+        if(resolved_branch_i.is_mispredict)
+          mispredict_counter <= mispredict_counter + 1;
+          div = 1 - (mispredict_counter / valid_counter);
+      end
+      $fwrite(f, "%f\n", div);
+    end
+    //TODO: End modifications 
+```
+2. What are the final hit-rate percentages of each of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp)? \
+  div: 69.4% \
+  loop: 89.3% \
+  spagetti: 96%
+3. Compare the performance of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp) after choosing 3 new values for [`NR_ENTRIES`](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv#L419). Display the 4 hit-rates in a table and explain how and why each program changes its hit-rate as BHT size changes. *Note: When changing `NR_ENTRIES`, be sure to change `NR_ENTRIES` in the `bht` instantiation in `"frontend.sv"`, not the `bht` declaration in `"bht.sv"`. Also your `NR_ENTRIES` values should be on the order of 16 to have interesting results.* \
+| Name       | 16 | 32 | 48 | 64 |relation| 
+|:-----------|---:|:--:|:--:|:--:|:--:|
+| dive       |74% |69% |63% |69% |decreases|
+| loop       |89% |89% |89% |89% |constant|
+| spagetti   |75% |88% |82% |95% |increasing|
 ### Example of How to Write to a File in Verilog/SystemVerilog
 
 ```systemverilog
