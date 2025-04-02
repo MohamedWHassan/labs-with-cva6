@@ -8,7 +8,7 @@ In this lab, you will need to modify the existing [branch predictor](https://git
 1. What is the purpose of a branch predictor? Why does a single-cycle core not need branch prediction? \
    The branch predictor tries to guess which way a branch will go. A single-cycle core doesn't need branch prediction because the branch decision is known within a single cycle and there
    is no pipeline to fill upcoming instructions.
-3. Define and compare and contrast the following: \
+3. Define and compare and contrast the following:
     * Static branch prediction vs. Dynamic branch prediction
       Static branch prediction: The branch would always be assumed to be taken until it is evaluated. \
       Dynamic branch prediction: The branch decision is determined according to the dynamic history of core execution.
@@ -78,8 +78,13 @@ To do this, you can create an `always_ff @(posedge clk)` block that counts how m
   div: 69.4% \
   loop: 89.3% \
   spagetti: 96%
-3. Compare the performance of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp) after choosing 3 new values for [`NR_ENTRIES`](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv#L419). Display the 4 hit-rates in a table and explain how and why each program changes its hit-rate as BHT size changes. *Note: When changing `NR_ENTRIES`, be sure to change `NR_ENTRIES` in the `bht` instantiation in `"frontend.sv"`, not the `bht` declaration in `"bht.sv"`. Also your `NR_ENTRIES` values should be on the order of 16 to have interesting results.* \
-| Name       | 16 | 32 | 48 | 64 |relation| 
+3. Compare the performance of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp) after choosing 3 new values for [`NR_ENTRIES`](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv#L419). Display the 4 hit-rates in a table and explain how and why each program changes its hit-rate as BHT size changes. *Note: When changing `NR_ENTRIES`, be sure to change `NR_ENTRIES` in the `bht` instantiation in `"frontend.sv"`, not the `bht` declaration in `"bht.sv"`. Also your `NR_ENTRIES` values should be on the order of 16 to have interesting results. \
+```answer
+For the `loop.s`, the number of branches are 3 so they fit into the the 16 interies BHT.
+For the `spagetti.s`, the number of branches is more than 30 so increasing the number of entries plays a role in increasing the accuracy.
+For the `div.s`, 
+```
+| *Name*       | *16* | *32* | *48* | *64* |*relation*| 
 |:-----------|---:|:--:|:--:|:--:|:--:|
 | dive       |74% |69% |63% |69% |decreases|
 | loop       |89% |89% |89% |89% |constant|
@@ -114,9 +119,131 @@ A few notes on your implementation:
 ### Part 2 Questions
 
 1. Share your modified `"bht.sv"` that implements the global two-level adaptive branch predictor.
-2. What specifications did you decide on for your predictor? What is your BHT index generation algorithm? How wide is your GHR? Which address bits do you use for your address?
+```systemverilog
+// branch history table - 2 bit saturation counter
+module bht #(
+    parameter int unsigned NR_ENTRIES = 1024
+)(
+    input  logic                        clk_i,
+    input  logic                        rst_ni,
+    input  logic                        flush_i,
+    input  logic                        debug_mode_i,
+    input  logic [riscv::VLEN-1:0]      vpc_i,
+    input  ariane_pkg::bht_update_t     bht_update_i,
+    // we potentially need INSTR_PER_FETCH predictions/cycle
+    output ariane_pkg::bht_prediction_t [ariane_pkg::INSTR_PER_FETCH-1:0] bht_prediction_o
+);
+    // the last bit is always zero, we don't need it for indexing
+    localparam OFFSET = ariane_pkg::RVC == 1'b1 ? 1 : 2;
+    // re-shape the branch history table
+    localparam NR_ROWS = NR_ENTRIES / ariane_pkg::INSTR_PER_FETCH;
+    // number of bits needed to index the row
+    localparam ROW_ADDR_BITS = $clog2(ariane_pkg::INSTR_PER_FETCH);
+    localparam ROW_INDEX_BITS = ariane_pkg::RVC == 1'b1 ? $clog2(ariane_pkg::INSTR_PER_FETCH) : 1;   // 1    1
+    // number of bits we should use for prediction
+    localparam PREDICTION_BITS = $clog2(NR_ROWS) + OFFSET + ROW_ADDR_BITS;
+    // we are not interested in all bits of the address
+    unread i_unread (.d_i(|vpc_i));
+    // local param
+    localparam n = 30;
+
+    struct packed {
+        logic       valid;
+        logic [1:0] saturation_counter;
+    } bht_d[NR_ROWS-1:0][ariane_pkg::INSTR_PER_FETCH-1:0], bht_q[NR_ROWS-1:0][ariane_pkg::INSTR_PER_FETCH-1:0];
+
+    logic [$clog2(NR_ROWS)-1:0]  index, update_pc, gshare_update_pc, gshare_index;
+    logic [ROW_INDEX_BITS-1:0]    update_row_index;
+    logic [1:0]                  saturation_counter;
+    logic [n-1:0] ghr; // global history record that records the last n branches
+    always_ff@(posedge clk_i or negedge rst_ni) begin
+        if(!rst_ni) begin
+            ghr <= 0;
+        end
+        else begin
+            if(bht_update_i.valid)
+                ghr <= {bht_update_i.taken, ghr[n-1:1]};
+        end
+    end
+
+    assign index     = vpc_i[PREDICTION_BITS - 1:ROW_ADDR_BITS + OFFSET];
+    assign gshare_index = index ^ ghr;
+    assign update_pc = bht_update_i.pc[PREDICTION_BITS - 1:ROW_ADDR_BITS + OFFSET]; // XOR update PC and GHR
+    assign gshare_update_pc = update_pc ^ ghr;
+
+    if (ariane_pkg::RVC) begin : gen_update_row_index
+      assign update_row_index = bht_update_i.pc[ROW_ADDR_BITS + OFFSET - 1:OFFSET];
+    end else begin
+      assign update_row_index = '0;
+    end
+
+    // prediction assignment
+    for (genvar i = 0; i < ariane_pkg::INSTR_PER_FETCH; i++) begin : gen_bht_output
+        assign bht_prediction_o[i].valid = bht_q[gshare_index][i].valid;
+        assign bht_prediction_o[i].taken = bht_q[gshare_index][i].saturation_counter[1] == 1'b1;
+    end
+
+    always_comb begin : update_bht
+        bht_d = bht_q;
+        saturation_counter = bht_q[gshare_update_pc][update_row_index].saturation_counter;
+
+        if (bht_update_i.valid && !debug_mode_i) begin
+            bht_d[gshare_update_pc][update_row_index].valid = 1'b1;
+
+            if (saturation_counter == 2'b11) begin
+                // we can safely decrease it
+                if (!bht_update_i.taken)
+                    bht_d[gshare_update_pc][update_row_index].saturation_counter = saturation_counter - 1;
+            // then check if it saturated in the negative regime e.g.: branch not taken
+            end else if (saturation_counter == 2'b00) begin
+                // we can safely increase it
+                if (bht_update_i.taken)
+                    bht_d[gshare_update_pc][update_row_index].saturation_counter = saturation_counter + 1;
+            end else begin // otherwise we are not in any boundaries and can decrease or increase it
+                if (bht_update_i.taken)
+                    bht_d[gshare_update_pc][update_row_index].saturation_counter = saturation_counter + 1;
+                else
+                    bht_d[gshare_update_pc][update_row_index].saturation_counter = saturation_counter - 1;
+            end
+        end
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            for (int unsigned i = 0; i < NR_ROWS; i++) begin
+                for (int j = 0; j < ariane_pkg::INSTR_PER_FETCH; j++) begin
+                    bht_q[i][j] <= '0;
+                end
+            end
+        end else begin
+            // evict all entries
+            if (flush_i) begin
+                for (int i = 0; i < NR_ROWS; i++) begin
+                    for (int j = 0; j < ariane_pkg::INSTR_PER_FETCH; j++) begin
+                        bht_q[i][j].valid <=  1'b0;
+                        bht_q[i][j].saturation_counter <= 2'b10;
+                    end
+                end
+            end else begin
+                bht_q <= bht_d;
+            end
+        end
+    end
+endmodule
+```
+2. What specifications did you decide on for your predictor? What is your BHT index generation algorithm? How wide is your GHR? Which address bits do you use for your address? \
+BHT index generation is the Gshare aglorithm. \
+GHR is 30 bit wide. \
+The same ones originally used. \
 3. Briefly explain your reasoning behind the BHT index generation algorithm you chose.
+No reason really it looked nice.
 4. Compare the performance of the [bp benchmarks](https://github.com/sifferman/labs-with-cva6/tree/main/programs/bp) after choosing 3 new values for [`NR_ENTRIES`](https://github.com/openhwgroup/cva6/blob/b44a696bbead23dafb068037eff00a90689d4faf/core/frontend/frontend.sv#L419). Display the 4 hit-rates in a table and explain how and why each program changes its hit-rate as BHT size changes.
+
+| *Name*       | *16* | *32* | *48* | *64* |*relation*| 
+|:-----------|---:|:--:|:--:|:--:|:--:|
+| dive       |68% |70% |61% |73% |almost no change|
+| loop       |89% |89% |94% |95% |increases|
+| spagetti   |71% |62% |69% |77% |increasing|
 
 ## Global Branch Predictor Specifications
 
