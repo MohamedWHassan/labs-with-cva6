@@ -82,8 +82,208 @@ When providing screenshots of waveforms, please include all signals you decide a
 1. Share your program. Be sure each situation is clearly commented.
 2. Provide a waveform screenshot and a brief explanation of **how the issue queue is affected** for each of the following situations:
     1. Out-of-Order Execution
-    2. Read after Write hazard
-    3. Write after Write hazard
-    4. Write after Read hazard
-    5. A branch miss
-    6. The issue queue full
+       ````systemverilog
+                /*
+          * File: fpu_example.S
+          * Description: Example of how to enable the FPU.
+          */
+         
+         #define EXTMEM_ADDR 0x100000000UL
+         
+                 .text
+         # Text segment
+                 .globl _start;
+         _start: # entry point
+         
+         
+                 # enable FPU
+                 li      t0, (3 << 13);
+                 csrs    mstatus, t0;
+         
+                 # load floats into f0 and f1
+                 la      t0, WORD_F0;
+                 flw     f0, 0(t0);
+                 la      t0, WORD_F1;
+                 flw     f1, 0(t0);
+         
+                 #load
+                 li t2, EXTMEM_ADDR
+                 lw t1, 0(t2)
+                 # single precision RVF instructions
+                 fadd.s  f2, f0, f1;
+                 # normal add
+                 li a1, 2025
+                 li a2, 1998
+                 sub a3, a1, a2
+         
+                 # exit
+                 li      a0, 0;  # set exit value to 0
+                 li      a7, 93; # set syscall to `exit`
+                 ecall;
+         
+                 .data
+         # Data segment
+         WORD_F0: .word 0x431a0000 # 154.0
+         WORD_F1: .word 0x41700000 #  15.0
+         
+         
+                 .section ".tohost","aw",@progbits
+                 .globl tohost
+                 .globl fromhost
+         
+                 .align 6
+         tohost: .dword 0
+                 .align 6
+         fromhost: .dword 0
+
+       ````
+       The program issues a load, followed by a fpu add instruction and finally ends with a subtract. \
+       ![image](https://github.com/user-attachments/assets/753c350a-c9b0-4fda-a2db-cd9ac7a7f958)
+      The load gets assigned to index 0 in the issue queue. \
+       ![image](https://github.com/user-attachments/assets/4992b1bf-b2f9-408e-ba7d-9c31d8d7dde0)
+      The FPU add gets assigned to index 1 in the issue queue. \
+      The Subtract instruction is assigned later and deasseted after two cycles as well.
+      Both the load and FPU add get written back at the same cycle IDK WHY?
+    3. Read after Write hazard
+       The raw.S program is given below:
+       ````systemverilog
+          /*
+          * File: fpu_example.S
+          * Description: Example of how to enable the FPU.
+          */
+          
+         #define EXTMEM_ADDR 0x100000000UL
+         
+         
+                 .text
+         # Text segment
+                 .globl _start;
+         _start: # entry point
+         
+                 #load
+                 li t2, EXTMEM_ADDR
+                 lw t1, 0(t2)
+                 # normal add
+                 add a3, a0, t1
+         
+                 # exit
+                 li      a0, 0;  # set exit value to 0
+                 li      a7, 93; # set syscall to `exit`
+                 ecall;
+         
+                 .data
+         # Data segment
+         WORD_F0: .word 0x431a0000 # 154.0
+         WORD_F1: .word 0x41700000 #  15.0
+         
+                 .section ".tohost","aw",@progbits
+                 .globl tohost
+                 .globl fromhost
+         
+                 .align 6
+         tohost: .dword 0
+                 .align 6
+         fromhost: .dword 0
+
+       ````
+       The program loads data from external memory into register t1 using the instruction `lw t1, 0(t2)`
+       The program then uses `t1` as an operand in an add instruction `add a3, a0, t1`
+       The waveform of the issue queue is shown below and it shows that the add instruction is delayed untill the load is executed.
+       ![image](https://github.com/user-attachments/assets/8f0bf9c6-154e-4957-b106-e17aa652317a)
+
+    5. Write after Write hazard
+       ````systemverilog
+            /*
+          * File: fpu_example.S
+          * Description: Example of how to enable the FPU.
+          */
+          
+         #define EXTMEM_ADDR 0x100000000UL
+         
+         
+                 .text
+         # Text segment
+                 .globl _start;
+         _start: # entry point
+         
+                 #load
+                 li t2, EXTMEM_ADDR
+                 lw t1, 0(t2)
+                 # normal add
+                 add t1, a0, 1
+         
+                 # exit
+                 li      a0, 0;  # set exit value to 0
+                 li      a7, 93; # set syscall to `exit`
+                 ecall;
+         
+                 .data
+         # Data segment
+         WORD_F0: .word 0x431a0000 # 154.0
+         WORD_F1: .word 0x41700000 #  15.0
+         
+                 .section ".tohost","aw",@progbits
+                 .globl tohost
+                 .globl fromhost
+         
+                 .align 6
+         tohost: .dword 0
+                 .align 6
+         fromhost: .dword 0
+
+       ````
+       The program loads data from external memory into register `t1` using the instruction `lw t1, 0(t2)`
+       Then writes into register `t1` again using the add instruction `add t1, a0, 1` which should cause a WAW hazard.
+       The waveform of the issue queue is shown below and it shows that the add instruction is delayed until the load instruction is executed.
+       ![image](https://github.com/user-attachments/assets/ba1179a8-f688-4e8c-b741-724a75e61429)
+
+    7. Write after Read hazard
+       ````systemverilog
+          /*
+          * File: fpu_example.S
+          * Description: Example of how to enable the FPU.
+          */
+          
+         #define EXTMEM_ADDR 0x100000000UL
+         
+         
+                 .text
+         # Text segment
+                 .globl _start;
+         _start: # entry point
+         
+                 #load
+                 li t2, EXTMEM_ADDR
+                 lw t1, 0(t2)
+                 # normal add
+                 add t2, a0, 1
+         
+                 # exit
+                 li      a0, 0;  # set exit value to 0
+                 li      a7, 93; # set syscall to `exit`
+                 ecall;
+         
+                 .data
+         # Data segment
+         WORD_F0: .word 0x431a0000 # 154.0
+         WORD_F1: .word 0x41700000 #  15.0
+         
+                 .section ".tohost","aw",@progbits
+                 .globl tohost
+                 .globl fromhost
+         
+                 .align 6
+         tohost: .dword 0
+                 .align 6
+         fromhost: .dword 0
+       ````
+       The program uses `t2` as an address to load from the external memory.
+       Then another add instruction writes into the `t2` register.
+       The waveform below shows the execution of the issue queue which shows the load instruction being allocated first followed by the
+       add instruction which doesn't wait for the load instruction to finish however it is executed after the load instruction is finished as can be seen by
+       issued signal which clearly shows the hazard in action.
+       ![image](https://github.com/user-attachments/assets/b2fb0e95-2795-441e-baff-706028df491a)
+
+    9. A branch miss
+        
+    11. The issue queue full
