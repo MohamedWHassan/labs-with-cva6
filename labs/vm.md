@@ -1,6 +1,3 @@
-
-# Virtual Memory
-
 In addition to the lectures, please use the following resources to help you with this lab:
 
 * [RISC-V Privileged Architecture Manual](https://github.com/riscv/riscv-isa-manual)
@@ -46,32 +43,76 @@ In this lab, you will be implementing basic trap handlers.
 
 You will need the [RISC-V Privileged Architecture Manual](https://github.com/riscv/riscv-isa-manual) to answer some of these questions.
 
-1. What is the purpose of virtual memory?
-2. Define the following: MMU, PTW, TLB.
-3. What is the benefit of a multi-layer page table?
-4. For Sv39, give
-    1. The number of bits in a VA
-    2. The number of bits in a PA
-    3. The number of layers a PT can be
-    4. The size of a page in bytes
-    5. The size of a PTE in bytes
-5. Complete the following page table entry questions.
+1. What is the purpose of virtual memory? \
+   Virtual memory enables multiple features:
+   1- Having the illusion of huge memory size while being fast. The progammer sees the memory as infinite.
+   2- Having multiple processes executing within the same address space without affecting each other.
+3. Define the following: MMU, PTW, TLB. \
+   MMU: Memory Management Unit, the hardware component responsible for virtual memory support. \
+   PTW: Page Table Walker, A hardware accelerator used to find page table entry required for a virtual address to physical address translation. \
+   TLB: Table Lookaside buffer, used to cache page table entries. \
+5. What is the benefit of a multi-layer page table?
+   Solves the issue of huge number of page table entries by splitting the page table into multiple page tables while storing only the most accessable page tables among all of them in physical memory.
+7. For Sv39, give
+    1. The number of bits in a VA: 39 bits
+    2. The number of bits in a PA: 56 bits
+    3. The number of layers a PT can be: 512 entry
+    4. The size of a page in bytes: 2^12 bytes according to the page offset
+    5. The size of a PTE in bytes: 8 bytes
+8. Complete the following page table entry questions.
     1. Provide a diagram of a Sv39 PTE.
-    2. List and define the 10 bottom bits of a Sv39 page table entry.
-    3. In [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S), each PTE's bottom 8 bits are set to either `0x1`, `0xef`, or `0xff`; explain the purposes of each of these three values in the context of [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S).
-6. Draw a diagram of the hierarchical page table created in [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) (unmodified).
+       ![image](https://github.com/user-attachments/assets/bdd61f6d-4d1e-4539-92dc-823e83480e17)
+    3. List and define the 10 bottom bits of a Sv39 page table entry.
+       RSW: reserved for supervisor software. \
+       D: Dirty, indicates if the virtual page has been written since the last time it was cleared. \
+       A: Accessed indicates if the page has been read, written, fetched from since the last time it was cleared. \
+       G: Global mapping means this address exists in all address spaces. \
+       U: It indicates if this page is accessable to user mode. \
+       X: Executable page. \
+       W: Writable page. \
+       R: Readable page. \
+       V: Valid (means page page table entry is valid).
+    5. In [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S), each PTE's bottom 8 bits are set to either `0x1`, `0xef`, or `0xff`; explain the purposes of each of these three values in the context of [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S).
+       Setting it to 0x1 means the page table entry contains a valid physical address which happens when setting PT1 pointer in PT2 and PT0 pointer in PT1. \
+       Setting it to 0xef means the page table entry contains a valid physical address that is excutable, readable, writable, not accessed from user, but from supervisor probably. \
+       It happens when setting the Kernel, PT0, PT1, PT2 physical address in PT0 initialization process. \
+       Setting it to 0xff means all the above plus it is a physical address where user can execute from. which happens when setting the virtual address mapping of the user space into the physical address.
+9. Draw a diagram of the hierarchical page table created in [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) (unmodified).
     * Show/describe the contents of every valid PTE in each PT.
     * Denote pointers from a PTE to another layer with an arrow to the corresponding PT.
     * Show the contents of every valid physical frame in physical memory.
-7. In [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) and [`"programs/vm/privilege.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/privilege.S), several control/status registers are written. For each of the registers, provide a screenshot of the bit diagram, and a definition of each of any fields that the provided programs use. (For example, [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) only uses the `SUM` from `sstatus`, so `SUM` is the only field you need to give a definition of for `sstatus`).
+<img src="https://github.com/user-attachments/assets/d87d3542-0151-42bb-a9f7-b20149917c4c" alt="image" width="400"/>
+
+10. In [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) and [`"programs/vm/privilege.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/privilege.S), several control/status registers are written. For each of the registers, provide a screenshot of the bit diagram, and a definition of each of any fields that the provided programs use. (For example, [`"programs/vm/os.S"`](https://github.com/sifferman/labs-with-cva6/blob/main/programs/vm/os.S) only uses the `SUM` from `sstatus`, so `SUM` is the only field you need to give a definition of for `sstatus`).
     1. `mstatus`
-    2. `sstatus`
-    3. `mepc`
-    4. `sepc`
-    5. `mtvec`
-    6. `stvec`
-    7. `satp`
-    8. `medeleg`
+       ![image](https://github.com/user-attachments/assets/35eda297-5947-4c7c-831e-7fe9c0a06aba)
+        MPP: Holds the priviledge level previous to machine mode. \ 
+        SPIE: holds the value of the interrupt enable bit value prior to the trap that went into S mode.
+    3. `sstatus`
+       ![image](https://github.com/user-attachments/assets/e252712d-7bd6-4b0f-b279-2afcc6e26219)
+        SUM: permits supervisor to access user memory. READ or WRITE BUT supervisor can never execute from user pages regardless of the state of SUM.
+    5. `mepc`
+       ![image](https://github.com/user-attachments/assets/e7c24755-de0d-4350-8a32-0994300671a3)
+        When a trap is taken into M-mode, mepc is written with the virtual address of the instruction that was interrupted or that encountered the exception.
+    7. `sepc`
+       ![image](https://github.com/user-attachments/assets/ea66b248-9ef0-49ed-aefa-4486619fd129)
+        When a trap istaken into S-mode, sepc is written with the virtual address of the instruction that was interrupted          or that encountered the exception.
+    9. `mtvec`
+        ![image](https://github.com/user-attachments/assets/14cc66c0-a9d4-49fe-9be2-3fd10c4c185d)
+        All traps into machine mode cause the PC to be set to the address in the BASE field. \
+        And other similar stuff go to the ISA.
+    11. `stvec`
+        ![image](https://github.com/user-attachments/assets/ef1aee3c-b075-429e-872e-295eacb4ff9f)
+        All traps into supervisor mode cause the PC to be set to the address in the BASE field. \
+        And other similar stuff go to the ISA.
+    13. `satp`
+        ![image](https://github.com/user-attachments/assets/f173ac9a-ddf0-41ab-80c4-06476e593a84)
+        MODE: Selects the current address translation scheme.
+        PPN: holds the physical page number of the root page table.
+    15. `medeleg`
+        ![image](https://github.com/user-attachments/assets/f52ea454-0208-4465-825f-baf9c0b3eef7)
+        Each bit corresponds to a specific exception code and it is set this sepcific exception can be handled by S mode instead of Machine mode. Ie. all exceptions are normally handled in M mode. \
+        If a bit is set to 1, and the exception occurs while executing in U-mode or S-mode, the exception is delegated to S-mode. Otherwise, it is handled in M-mode.
 
 ## Lab
 
