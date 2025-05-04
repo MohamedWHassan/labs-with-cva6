@@ -110,17 +110,23 @@ OS:
         csrs sstatus, t0;
 
         # Load program 1 to user space
-        bge x, 2, U2;
+        la t0, x;
+        lw t1, 0(t0);
+        bge t1, 2, U2;
         la t0, user_program_1; # Load the the address to start copying into t0
         la t1, user_program_1_end # Load the address to stop copying into t1
         li t3, USER_1_VA; # Load the destination address into t3
+        li t5, USER_1_VA;
         j 1;
 U2:
         # Load program 2 to user space
-        bge x, 3, exit;
+        la t0, x;
+        lw t1, 0(t0);
+        bge t1, 3, exit;
         la t0, user_program_2; # Load the the address to start copying into t0
         la t1, user_program_2_end # Load the address to stop copying into t1
         li t3, USER_2_VA; # Load the destination address into t3
+        li t5, USER_2_VA;
         j 1;
 exit:
         # return to machine mode
@@ -138,7 +144,7 @@ exit:
         csrc sstatus, t0;
 
         # Get into user mode
-        li      t5, USER_VA;
+        # li      t5, USER_VA;
         csrw    sepc, t5;
         sret;
 
